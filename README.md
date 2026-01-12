@@ -5,7 +5,7 @@
 
 Mimi Playerは、シンプルで人間が読み書きできる音楽フォーマット `.mimi` のための再生ライブラリです。Web Audio APIを使用して、テキストで書かれた楽譜をリアルタイムで音声に合成します。
 
-**[Mimi Composer Demo](https://aruihayoru.github.io/mimi/maker/)** (←デモのURLに合わせて変更してください)
+**[Mimi Composer Demo](https://aruihayoru.github.io/mimi/maker/)**
 
 ## What is the `.mimi` format?
 
