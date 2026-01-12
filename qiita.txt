@@ -1,0 +1,422 @@
+# 音声ファイルを作るよ（Music instrument minimal interface. Mimiフォーマット）
+
+
+### 音声フォーマットがつくりたい！！
+...いや、.mrvっていう動画フォーマットを作ったからです。それだけです。
+次は画像フォーマットかな。
+
+## 構造
+えーっと、私は愚かだから一行単位で一音管理しようかな
+音の種類/音の高さ/音の長さ/開始地点/改行コード...っていう
+```text
+音の種類については無視。00~04程度で十分かな（正弦波、三角波、矩形波、ノイズ）
+音の高さについては～...00~FF程度、でしょ？
+音の長さ：うーん、20秒とか続く音はピアノの楽譜にもあるよね？（ない）なら、8バイトぐらい（過剰）とっといてもいいよね
+開始地点：....どうしよう。1/60セカンドを1フレームとして扱うべきか...それとも1/30、いや1/24とか？
+改行コード...これは、Nppとかでも見れるようにしたいからですね（いらない）。CRLFとか
+```
+
+## めんどくせえ
+8バイトも長かったら`FFFFFFFFFFFFFFFF`で、255^8で`17878103000000000000`フレームも流せちまうぞ。
+規格名から考えよう....
+*music instrument minimal interface....* **mimi**
+わー、かわいい名前。.mimiってことにしよう。
+~~more ramen, v(p)leaseより遥かに良い。~~
+
+あとノコギリ波みたいなやつもいるか。
+のこぎりなみじょうなみみたいな
+鋸歯状波かな多分。多分。
+読みがわからん、のこぎりはじょうはってことでいいや
+鋸歯状か
+きょしじょう
+良い名前だ
+
+### テキストエディタで開いたとき、こんな感じだとステキ！！
+```python
+# MIMI Music Format v1.0
+# Type, Pitch, Length, Start
+00, 3C, 0000003C, 00000000
+02, 40, 0000003C, 0000003C
+04, 3C, 00000078, 00000078
+```
+
+### ....考え直そう
+mrvは24fpsだった。なら、これも1/24を1フレームとして扱おう。
+同期処理は考えてないからいいけど！
+んで、最終仕様
+音の種類, ピッチ, 音の長さ, 開始地点/改行コード
+これでいい！
+音の種類：00を正弦波、01を三角波、02を短形波、03を鋸歯状波、04をノイズ。いいね。
+音の高さ：MIDIよりも広い、00~FF！いいね。
+音の長さ：2バイト。0000~FFFF
+開始地点：一応、4バイト取っておく。とっても長い曲でもいいように。00000000~FFFFFFFF。
+1フレームを1/24と定義。あとで困るやーつ。
+
+### まて。音量が足りない。
+Type, Pitch, Length, Start, Volume
+これでいいや。一応Volumeは省略できるように。初期値255。
+```python
+# MIMI Music Format v1.0
+# Type, Pitch, Length, Start, Volume, Extra(Ignore)
+00, 3C, 000C, 0000, FF
+01, 40, 000C, 000C, FF
+02, 43, 0018, 0018, 80
+04, 30, 0006, 0030, FF
+03, 3C, 0024, 0000, 40
+```
+**とりあえず完成。**
+
+すごい頭いいかもしれない。
+ぶっちゃけ、ファイルの中身を一行ずつかき乱しても動作するぞ。
+同じフレームから始まる音、同じフレーム地点で重なる音ってのもやりやすい
+あと5列目以降にデータがあっても無視。頭いい。
+
+あと、もっと高機能にしてみた。
+Type, Pitch, Length, Start, Volume, Pan
+そう。Panを追加した。00~FFです。00が左で、FFが右。
+いいですね。もちろんこれも省略可。
+
+最終版がこちら
+```python
+# MIMI Music Format v1.0 - Specification Test File
+# Type, Pitch, Length, Start, Volume, Pan
+
+# ---------------------------------------------------------
+# TEST 1: 全波形チェック (0.5秒ずつ順番に鳴るはず)
+# ---------------------------------------------------------
+00, 45, 000C, 0000, FF, 80   # 0秒: 正弦波 (A4) - 中央
+01, 45, 000C, 000C, FF, 80   # 0.5秒: 三角波 (A4) - 中央
+02, 45, 000C, 0018, FF, 80   # 1.0秒: 矩形波 (A4) - 中央
+03, 45, 000C, 0024, FF, 80   # 1.5秒: 鋸歯状波 (A4) - 中央
+04, 00, 000C, 0030, FF, 80   # 2.0秒: ノイズ - 中央
+
+# ---------------------------------------------------------
+# TEST 2: パンニング（左右）チェック
+# ---------------------------------------------------------
+00, 3C, 0018, 0048, FF, 00   # 3.0秒: ド (左から)
+00, 40, 0018, 0060, FF, FF   # 4.0秒: ミ (右から)
+00, 43, 0018, 0078, FF, 80   # 5.0秒: ソ (真ん中から)
+
+# ---------------------------------------------------------
+# TEST 3: 和音とボリュームチェック (同時に重なる)
+# ---------------------------------------------------------
+01, 3C, 0030, 0090, 40, 40   # 6.0秒: 低音ド (音量控えめ、やや左)
+01, 40, 0030, 0090, 40, C0   # 6.0秒: 低音ミ (音量控えめ、やや右)
+01, 43, 0030, 0090, 40, 80   # 6.0秒: 低音ソ (音量控えめ、中央)
+
+# ---------------------------------------------------------
+# TEST 4: かき乱しテスト (一番最後にあるが、0秒地点で鳴るはず)
+# ---------------------------------------------------------
+03, 51, 00C0, 0000, 20, 80   # 0秒から最後まで鳴り続ける薄いベース音
+
+# ---------------------------------------------------------
+# TEST 5: 拡張列の無視テスト (7列目以降にゴミがあっても動くか)
+# ---------------------------------------------------------
+00, 48, 000C, 00C0, FF, 80, ERROR, 999, IGNORE_ME
+```
+
+うん。大体予想していた挙動だ。
+完成したライブラリがこちら。
+https://github.com/AruihaYoru/mimi に配置しています。
+
+`<script src="https://raw.githubusercontent.com/AruihaYoru/mimi/refs/heads/main/mimi.min.js"></script>`でもいいです。
+```javascript
+class MimiPlayer {
+    constructor(fps = 24) {
+        this.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        this.masterGain = this.audioCtx.createGain();
+        this.masterGain.connect(this.audioCtx.destination);
+        this.fps = fps;
+        this.notes = [];
+        this.activeNodes = new Set();
+        this._noise = null;
+    }
+
+    get noiseBuffer() {
+        if (!this._noise) {
+            const size = this.audioCtx.sampleRate * 2;
+            this._noise = this.audioCtx.createBuffer(1, size, this.audioCtx.sampleRate);
+            const d = this._noise.getChannelData(0);
+            for (let i = 0; i < size; i++) d[i] = Math.random() * 2 - 1;
+        }
+        return this._noise;
+    }
+
+    load(text) {
+        this.notes = text.split(/\r?\n/)
+            .map(l => l.split('#')[0].trim())
+            .filter(l => l)
+            .map(line => {
+                const cols = line.split(',').map(s => s.trim());
+                if (cols.length < 4) return null;
+                return {
+                    type:   parseInt(cols[0], 16),
+                    pitch:  parseInt(cols[1], 16),
+                    length: parseInt(cols[2], 16),
+                    start:  parseInt(cols[3], 16),
+                    volume: cols[4] !== undefined ? parseInt(cols[4], 16) : 255,
+                    pan:    cols[5] !== undefined ? parseInt(cols[5], 16) : 128
+                };
+            })
+            .filter(n => n !== null)
+            .sort((a, b) => a.start - b.start);
+    }
+
+    play(startFrame = 0) {
+        this.stop();
+        if (this.audioCtx.state === 'suspended') this.audioCtx.resume();
+        
+        const now = this.audioCtx.currentTime;
+        const frameTime = 1 / this.fps;
+
+        this.notes.forEach(note => {
+            const endFrame = note.start + note.length;
+            if (endFrame < startFrame) return;
+
+            const delay = Math.max(0, (note.start - startFrame) * frameTime);
+            const startTime = now + delay;
+            const duration = (note.start < startFrame ? endFrame - startFrame : note.length) * frameTime;
+            
+            if (duration > 0) {
+                this.scheduleNote(note, startTime, duration);
+            }
+        });
+    }
+
+    stop() {
+        this.activeNodes.forEach(n => { try { n.stop(); } catch(e) {} });
+        this.activeNodes.clear();
+    }
+
+    scheduleNote(note, startTime, duration) {
+        const g = this.audioCtx.createGain();
+        const p = this.audioCtx.createStereoPanner();
+        let s;
+
+        if (note.type === 4) {
+            s = this.audioCtx.createBufferSource();
+            s.buffer = this.noiseBuffer;
+            s.loop = true;
+        } else {
+            s = this.audioCtx.createOscillator();
+            const types = ['sine', 'triangle', 'square', 'sawtooth'];
+            s.type = types[note.type] || 'sine';
+            const freq = 440 * Math.pow(2, (note.pitch - 69) / 12);
+            s.frequency.setValueAtTime(freq, startTime);
+        }
+
+        p.pan.value = (note.pan / 127.5) - 1;
+
+        const vol = note.volume / 255;
+        const attack = 0.005;
+
+        g.gain.setValueAtTime(0, startTime);
+        g.gain.linearRampToValueAtTime(vol, startTime + attack);
+
+        if (note.type === 4) {
+            g.gain.exponentialRampToValueAtTime(0.001, startTime + duration);
+        } else {
+            const release = 0.01;
+            g.gain.setValueAtTime(vol, startTime + duration - release);
+            g.gain.linearRampToValueAtTime(0, startTime + duration);
+        }
+
+        s.connect(g).connect(p).connect(this.masterGain);
+        s.start(startTime);
+        s.stop(startTime + duration);
+
+        this.activeNodes.add(s);
+        s.onended = () => this.activeNodes.delete(s);
+    }
+}
+```
+
+
+
+### これで音楽を作るには
+このフォーマットの規格は以下の通り。
+1.  **ファイル拡張子**: `.mimi`
+2.  **ファイル構造**: テキストファイル（UTF-8 エンコード推奨）
+3.  **行構造**: 1行が1つの音符に対応
+    *   各行はカンマ `,` で区切られた複数のパラメータを持つ
+    *   コメント行は `#` で開始
+    *   空行は無視
+4.  **パラメータ**:
+    1.  **Type (音の種類)**: 2桁の16進数 `00` ~ `04`
+        *   `00`: 正弦波 (Sine Wave)
+        *   `01`: 三角波 (Triangle Wave)
+        *   `02`: 矩形波 (Square Wave)
+        *   `03`: 鋸歯状波 (Sawtooth Wave)
+        *   `04`: ノイズ (Noise)
+    2.  **Pitch (音の高さ)**: 2桁の16進数 `00` ~ `FF`
+        *   MIDIノートナンバーを参考にすると良い
+            *   例: `3C` = C4 (中央のド)
+    3.  **Length (音の長さ)**: 4桁の16進数 `0000` ~ `FFFF`
+        *   フレーム数で指定 (1フレーム = 1/24秒)
+            *   例: `000C` = 12フレーム = 0.5秒
+    4.  **Start (開始地点)**: 8桁の16進数 `00000000` ~ `FFFFFFFF`
+        *   フレーム数で指定 (1フレーム = 1/24秒)
+            *   例: `00000018` = 24フレーム = 1秒
+    5.  **Volume (音量)**: 2桁の16進数 `00` ~ `FF` (省略可, 初期値: `FF`)
+        *   `00`: 無音
+        *   `FF`: 最大音量
+    6.  **Pan (パン)**: 2桁の16進数 `00` ~ `FF` (省略可, 初期値: 中央)
+        *   `00`: 左
+        *   `80`: 中央
+        *   `FF`: 右
+5.  **テンポ (BPM)**:
+    *   コメント行で指定 (必須ではない)
+    *   例: `# Tempo: 120BPM (1beat = 12frames / 1bar = 48frames)`
+6.  **その他**:
+    *   6列目 (Pan) 以降のデータは無視される
+    *   同じ `Start` 地点に複数の音符を配置することで和音を表現可能
+
+
+あとヘッダー。
+```text
+# Mimi Music Format v1.0
+# Title: 
+# Tempo: BPM 
+# Type, Pitch, Length, Start, Volume, Pan
+
+```
+これつけておくことを推奨します。たぶんだれも使いませんけど！
+
+
+
+ついでに曲作りました。
+```python
+# Mimi Music Format v1.0
+# Title: Nothing
+# Tempo: 120BPM (1beat = 12frames / 1bar = 48frames = 0x30)
+# Type, Pitch, Length, Start, Volume, Pan
+
+# --- DRUMS (TYPE 04: Noise) ---
+# Kick (1拍目と3拍目のアタマ)
+04, 20, 0002, 0000, FF, 80
+04, 20, 0002, 0018, FF, 80
+04, 20, 0002, 0030, FF, 80
+04, 20, 0002, 0048, FF, 80
+
+# Snare (2拍目と4拍目)
+04, 40, 0004, 000C, C0, 80
+04, 40, 0004, 0024, C0, 80
+04, 40, 0004, 003C, C0, 80
+04, 40, 0004, 0054, C0, 80
+
+# Hi-Hat (裏拍で刻む 6, 18, 30... in hex)
+04, 60, 0001, 0006, 80, A0
+04, 60, 0001, 0012, 80, A0
+04, 60, 0001, 001E, 80, A0
+04, 60, 0001, 002A, 80, A0
+04, 60, 0001, 0036, 80, A0
+04, 60, 0001, 0042, 80, A0
+04, 60, 0001, 004E, 80, A0
+04, 60, 0001, 005A, 80, A0
+
+# --- BASS (TYPE 03: Sawtooth / 歯切れよく) ---
+03, 24, 0006, 0000, A0, 80   # C2
+03, 24, 0006, 000C, A0, 80   # C2
+03, 24, 0006, 0018, A0, 80   # C2
+03, 29, 0006, 0024, A0, 80   # F2
+03, 2B, 0006, 0030, A0, 80   # G2
+03, 2B, 0006, 003C, A0, 80   # G2
+03, 2B, 0006, 0048, A0, 80   # G2
+03, 24, 0006, 0054, A0, 80   # C2
+
+# --- MELODY (TYPE 01: Triangle / 中華風ペンタトニック) ---
+01, 3C, 000C, 0000, FF, 40   # ド
+01, 40, 000C, 000C, FF, C0   # ミ
+01, 43, 0006, 0018, FF, 40   # ソ
+01, 45, 0006, 001E, FF, C0   # ラ
+01, 48, 0018, 0024, FF, 80   # ド(High)
+
+# 2小節目のメロディ
+01, 48, 0006, 0030, FF, 40
+01, 45, 0006, 0036, FF, C0
+01, 43, 0006, 003C, FF, 40
+01, 40, 0006, 0042, FF, C0
+01, 3C, 0018, 0048, FF, 80
+
+# --- ACCENT (TYPE 00: Sine / キラキラした装飾) ---
+00, 54, 0003, 002A, 80, FF   # 1小節目の終わりに高い音を右から
+00, 54, 0003, 005A, 80, 00   # 2小節目の終わりに高い音を左から
+```
+なんでおれはこんなののために音楽理論を少し調べていたんだ本当に
+ていうか、これあれですね、.org。オルガニャでしたっけ。あれやん。
+
+あとLLM（Gemini 3.0 flash）にも曲作らせてみました
+```python
+`
+# Mimi Music Format v1.0
+# Title: Neon Rain
+# Tempo: 120BPM (1beat = 12frames)
+# Bar: 48frames (0x30)
+
+# --- DRUMS (TYPE 04: Noise) ---
+# Kick: 4つ打ち
+04, 20, 0003, 0000, FF, 80
+04, 20, 0003, 000C, FF, 80
+04, 20, 0003, 0018, FF, 80
+04, 20, 0003, 0024, FF, 80
+04, 20, 0003, 0030, FF, 80
+04, 20, 0003, 003C, FF, 80
+04, 20, 0003, 0048, FF, 80
+04, 20, 0003, 0054, FF, 80
+
+# Snare: 2拍・4拍
+04, 40, 0005, 000C, A0, 80
+04, 40, 0005, 0024, A0, 80
+04, 40, 0005, 003C, A0, 80
+04, 40, 0005, 0054, A0, 80
+
+# Hi-Hat: 8分で刻む
+04, 60, 0001, 0006, 70, 90
+04, 60, 0001, 0012, 70, 70
+04, 60, 0001, 001E, 70, 90
+04, 60, 0001, 002A, 70, 70
+04, 60, 0001, 0036, 70, 90
+04, 60, 0001, 0042, 70, 70
+04, 60, 0001, 004E, 70, 90
+04, 60, 0001, 005A, 70, 70
+
+# --- BASS (TYPE 02: Square / 8bit風の太いベース) ---
+# A -> F -> G -> E のコード進行風
+02, 2D, 0006, 0000, B0, 80 # A2
+02, 2D, 0006, 0006, 80, 80
+02, 2D, 0006, 000C, B0, 80
+02, 2D, 0006, 0012, 80, 80
+02, 29, 0006, 0018, B0, 80 # F2
+02, 29, 0006, 001E, 80, 80
+02, 29, 0006, 0024, B0, 80
+02, 29, 0006, 002A, 80, 80
+02, 2B, 0006, 0030, B0, 80 # G2
+02, 2B, 0006, 0036, 80, 80
+02, 2B, 0006, 003C, B0, 80
+02, 2B, 0006, 0042, 80, 80
+02, 28, 0006, 0048, B0, 80 # E2
+02, 28, 0006, 004E, 80, 80
+02, 28, 0006, 0054, B0, 80
+02, 28, 0006, 005A, 80, 80
+
+# --- LEAD MELODY (TYPE 03: Sawtooth / 切ないメロディ) ---
+03, 45, 000C, 0000, A0, 60 # A4
+03, 48, 000C, 000C, A0, A0 # C5
+03, 47, 000C, 0018, A0, 60 # B4
+03, 43, 000C, 0024, A0, A0 # G4
+
+03, 45, 0006, 0030, B0, 80 # A4
+03, 47, 0006, 0036, B0, 80 # B4
+03, 48, 000C, 003C, B0, 80 # C5
+03, 4A, 000C, 0048, B0, 80 # D5
+03, 4C, 0018, 0054, FF, 80 # E5
+
+# --- CHORD PAD (TYPE 01: Triangle / 背景の広がり) ---
+01, 39, 0030, 0000, 60, 20 # Low A
+01, 3C, 0030, 0000, 60, E0 # Low C
+01, 37, 0030, 0030, 60, 20 # Low G
+01, 3B, 0030, 0030, 60, E0 # Low B
+
+```
+
+AIでも思考で作れるフォーマットって何..?
