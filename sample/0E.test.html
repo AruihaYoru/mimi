@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>Mimi-Pluck</title>
+    <style>
+        body { background: #1a1a1a; color: #00ffcc; font-family: 'Courier New', Courier, monospace; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { border: 2px solid #00ffcc; padding: 20px; border-radius: 10px; background: #2a2a2a; box-shadow: 0 0 20px rgba(0,255,204,0.3); max-width: 600px; }
+        h1 { font-size: 1.5rem; text-align: center; margin-bottom: 20px; border-bottom: 1px solid #00ffcc; padding-bottom: 10px; }
+        .score-box { background: #000; color: #0f0; padding: 10px; height: 150px; overflow-y: scroll; font-size: 0.8rem; margin-bottom: 20px; border: 1px inset #555; }
+        button { background: #00ffcc; color: #1a1a1a; border: none; padding: 10px 20px; font-weight: bold; cursor: pointer; width: 100%; font-size: 1.1rem; }
+        button:hover { background: #00cca3; }
+        .info { font-size: 0.7rem; margin-top: 10px; color: #888; text-align: right; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Mimi-hex V2.0 Player</h1>
+    <div class="score-box" id="scoreDisplay">
+        # Mimi-hex Score (Type, Pitch, Len, Start, Vol, Pan, Atk, Rel)<br>
+        # Algorithm: 0E (Mimi-Pluck)
+    </div>
+    <button onclick="startDemo()">PLAY DEMO (Mimi-Pluck)</button>
+    <div class="info">Format: V2.0 (8-columns) | Tempo: 120BPM</div>
+</div>
+
+<script>
+/**
+ * Mimi-hex V2.0 Demo Song Data
+ * Type: 0E (Mimi-Pluck)
+ * Pitch: Hex MIDI Note
+ * Len: Hex (1 unit = 125ms)
+ * Start: Hex
+ */
+const rawScore = [
+    "0E, 2D, 0008, 00000000, FF, 80, 00, 40", // A2
+    "0E, 34, 0008, 00000004, D0, 80, 00, 40", // E3
+    "0E, 39, 0008, 00000008, D0, 80, 00, 40", // A3
+    "0E, 3C, 0008, 0000000C, FF, 80, 00, 40", // C4
+    
+    "0E, 29, 0008, 00000010, FF, 80, 00, 40", // F2
+    "0E, 30, 0008, 00000014, D0, 80, 00, 40", // C3
+    "0E, 35, 0008, 00000018, D0, 80, 00, 40", // F3
+    "0E, 39, 0008, 0000001C, FF, 80, 00, 40", // A3
+
+    "0E, 2B, 0008, 00000020, FF, 80, 00, 40", // G2
+    "0E, 32, 0008, 00000024, D0, 80, 00, 40", // D3
+    "0E, 37, 0008, 00000028, D0, 80, 00, 40", // G3
+    "0E, 3B, 0008, 0000002C, FF, 80, 00, 40", // B3
+
+    "0E, 28, 0008, 00000030, FF, 80, 00, 40", // E2
+    "0E, 2E, 0008, 00000034, D0, 80, 00, 40", // Bb2 (Tritone!)
+    "0E, 34, 0008, 00000038, D0, 80, 00, 40", // E3
+    "0E, 38, 0008, 0000003C, FF, 80, 00, 40", // G#3
+
+    "0E, 45, 0010, 00000000, FF, A0, 00, 60", // A5
+    "0E, 43, 0008, 00000010, FF, 60, 00, 60", // G5
+    "0E, 45, 0010, 00000020, FF, A0, 00, 60", // A5
+    "0E, 48, 0010, 00000030, FF, 80, 00, 60", // C6
+];
+
+document.getElementById('scoreDisplay').innerHTML += rawScore.join('<br>');
+
+let ctx = null;
+
+async function startDemo() {
+    if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+    if (ctx.state === 'suspended') await ctx.resume();
+
+    const unitTime = 0.125;
+
+    rawScore.forEach(line => {
+        const [type, pitch, len, start, vol, pan, atk, rel] = line.split(',').map(s => parseInt(s.trim(), 16));
+        
+        const startTime = ctx.currentTime + (start * unitTime);
+        const duration = len * unitTime;
+        const frequency = 440 * Math.pow(2, (pitch - 69) / 12);
+        const volume = vol / 255;
+        const panValue = (pan / 128) - 1;
+
+        if (type === 0x0E) {
+            playPluck(frequency, startTime, duration, volume, panValue);
+        }
+    });
+}
+
+function playPluck(freq, time, duration, vol, pan) {
+    const sr = ctx.sampleRate;
+    const N = Math.round(sr / freq);
+    const bufferDuration = Math.max(duration, 2.0);
+    const buf = ctx.createBuffer(1, sr * bufferDuration, sr);
+    const d = buf.getChannelData(0);
+    
+    let ring = Array.from({length: N}, () => Math.random() * 2 - 1);
+
+    for (let i = 0; i < d.length; i++) {
+        d[i] = ring[i % N];
+        ring[i % N] = (ring[i % N] + ring[(i + 1) % N]) * 0.496; 
+    }
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+
+    const gain = ctx.createGain();
+    const panner = ctx.createStereoPanner();
+
+    gain.gain.setValueAtTime(0, time);
+    gain.gain.linearRampToValueAtTime(vol, time + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + bufferDuration);
+
+    panner.pan.value = pan;
+
+    src.connect(panner).connect(gain).connect(ctx.destination);
+    src.start(time);
+    src.stop(time + bufferDuration);
+}
+</script>
+</body>
+</html>

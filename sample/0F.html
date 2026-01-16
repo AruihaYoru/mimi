@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<h2 style="letter-spacing: 5px;">HEX-SYMPHONY V2.1</h2>
+<button onclick="playSong()">RUN SEQUENCE (Start Play)</button>
+<div id="console"></div>
+<script>
+const ctx = new AudioContext();
+
+const Waves = {
+    sub:    "8ACE FFFF EC86 4200 0000 2468 ACEF FFEA",
+    lead:   "0123 4567 89AB CDEF 0123 4567 89AB CDEF",
+    square: "FFFF FFFF 0000 0000 FFFF FFFF 0000 0000",
+    noise:  "F0A3 1E8C 4B2D 965F 0F0F 33CC AA55 1234",
+    bell:   "0F0F 1E1E 2D2D 3C3C 4B4B 5A5A 6969 7878"
+};
+
+function createWavetableBuffer(hex, freq, duration, volume = 0.3) {
+    const data = hex.replace(/\s/g, '').split('').map(h => parseInt(h, 16));
+    const sr = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sr * duration, sr);
+    const d = buf.getChannelData(0);
+    const period = sr / freq;
+
+    for (let i = 0; i < d.length; i++) {
+        const pos = Math.floor((i % period) / period * data.length);
+        const envelope = 1.0 - (i / d.length); 
+        d[i] = (data[pos] / 7.5 - 1.0) * volume * envelope;
+    }
+    return buf;
+}
+
+function playNote(waveHex, freq, start, duration, volume) {
+    if (freq === 0) return;
+    const src = ctx.createBufferSource();
+    src.buffer = createWavetableBuffer(waveHex, freq, duration, volume);
+    src.connect(ctx.destination);
+    src.start(ctx.currentTime + start);
+}
+
+function logToConsole(type, hex, freq) {
+    const consoleEl = document.getElementById('console');
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = `[${new Date().toISOString().slice(17,23)}] <span class="highlight">${type}</span> ADDR:0x${Math.random().toString(16).slice(2,6).toUpperCase()} DATA:<small>${hex}</small> FREQ:${freq}Hz`;
+    consoleEl.prepend(div);
+}
+
+function playSong() {
+    let time = 0;
+    const step = 0.125;
+	
+    const melodyTrack = [
+        ['square', 523.3, 0.2], [null, 0, 0], ['square', 523.3, 0.2], ['square', 587.3, 0.2],
+        ['square', 659.3, 0.2], [null, 0, 0], ['square', 784.0, 0.2], [null, 0, 0],
+        ['lead', 880.0, 0.1], ['lead', 784.0, 0.1], ['lead', 659.3, 0.1], ['lead', 523.3, 0.1],
+        ['noise', 100, 0.5], [null, 0, 0], ['noise', 100, 0.2], ['noise', 100, 0.2]
+    ];
+
+    const bassTrack = [
+        ['sub', 130.8, 0.6], ['sub', 130.8, 0.4], ['sub', 130.8, 0.6], ['sub', 130.8, 0.4],
+        ['sub', 174.6, 0.6], ['sub', 174.6, 0.4], ['sub', 196.0, 0.6], ['sub', 196.0, 0.4],
+        ['sub', 130.8, 0.6], ['sub', 130.8, 0.4], ['sub', 130.8, 0.6], ['sub', 130.8, 0.4],
+        ['sub', 110.0, 0.6], ['sub', 110.0, 0.6], ['sub', 123.5, 0.6], ['sub', 123.5, 0.6]
+    ];
+
+    for(let loop = 0; loop < 4; loop++) {
+        melodyTrack.forEach((note, i) => {
+            const playTime = time + (i * step);
+            const bassNote = bassTrack[i];
+            
+            if(note[0]) {
+                playNote(Waves[note[0]], note[1], playTime, step * 0.9, note[2]);
+                setTimeout(() => logToConsole("MELODY", Waves[note[0]].substring(0,12), note[1]), playTime * 1000);
+            }
+
+            playNote(Waves[bassNote[0]], bassNote[1], playTime, step * 1.2, bassNote[2]);
+            if(i % 4 === 0) {
+                setTimeout(() => logToConsole("BASS-L", Waves[bassNote[0]].substring(0,12), bassNote[1]), playTime * 1000);
+            }
+        });
+        time += step * melodyTrack.length;
+    }
+}
+</script>

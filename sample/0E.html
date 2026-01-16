@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+<body>
+    <button onclick="strum()">だららら～ (全音)</button>
+    <button onclick="playChord()">和音 (C Major)</button>
+
+<script>
+const ctx = new AudioContext();
+
+function createPluckBuffer(freq) {
+    const sr = ctx.sampleRate, N = Math.round(sr / freq), len = sr * 1.5;
+    const buf = ctx.createBuffer(1, len, sr), d = buf.getChannelData(0);
+    let ring = Array.from({length: N}, () => Math.random() * 2 - 1);
+    for (let i = 0; i < len; i++) {
+        d[i] = ring[i % N];
+        ring[i % N] = (ring[i % N] + ring[(i + 1) % N]) * 0.493; // 減衰率
+    }
+    return buf;
+}
+
+function play(freq, delay) {
+    const src = ctx.createBufferSource();
+    src.buffer = createPluckBuffer(freq);
+    src.connect(ctx.destination);
+    src.start(ctx.currentTime + delay);
+}
+
+// だららら～（全音階を高速で回す）
+function strum() {
+    const scale = [261.6, 293.7, 329.6, 349.2, 392.0, 440.0, 493.9, 523.3];
+    scale.forEach((f, i) => play(f, i * 0.05)); // 0.05秒ずらし
+}
+
+// 和音（同時に鳴らす）
+function playChord() {
+    [261.6, 329.6, 392.0, 523.3].forEach(f => play(f, 0));
+}
+</script>
+</body>
+</html>

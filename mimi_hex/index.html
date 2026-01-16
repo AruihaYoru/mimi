@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MIMI_HEX　| Terminal Monitor</title>
+    <style>
+        :root {
+            --color-bg: #0a0a0a;
+            --color-main: #ffffff;
+            --color-dim: #00ff00;
+            --glow: 0 0 10px rgba(0, 255, 65, 0.5);
+        }
+
+        body {
+            background: var(--color-bg);
+            color: var(--color-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            text-shadow: var(--glow);
+        }
+
+        body::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                        linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 10;
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+        }
+
+        h1 {
+            font-size: 1rem;
+            margin: 20px 0 10px;
+            letter-spacing: 5px;
+            border-bottom: 2px solid var(--color-main);
+        }
+
+        .container {
+            width: 90%;
+            max-width: 800px;
+            z-index: 5;
+        }
+
+        .panel {
+            background: rgba(0, 20, 0, 0.8);
+            border: 1px solid var(--color-main);
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: inset 0 0 15px rgba(0, 255, 65, 0.2);
+        }
+
+        textarea {
+            width: 100%;
+            height: 80px;
+            background: #000;
+            color: var(--color-main);
+            border: 1px solid var(--color-dim);
+            padding: 10px;
+            box-sizing: border-box;
+            font-family: monospace;
+            resize: none;
+            outline: none;
+        }
+
+        textarea:focus {
+            border-color: var(--color-main);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        button {
+            background: var(--color-main);
+            color: #000;
+            border: none;
+            padding: 10px 30px;
+            font-family: monospace;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.3s;
+            clip-path: polygon(10% 0, 100% 0, 90% 100%, 0% 100%);
+        }
+
+        button:hover {
+            background: #fff;
+            box-shadow: 0 0 20px var(--color-main);
+        }
+
+        button:active {
+            transform: scale(0.95);
+        }
+
+        #monitor {
+            height: 120px;
+            background: #000;
+            border: 1px solid var(--color-main);
+            overflow: hidden;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            word-break: break-all;
+            padding: 0 20px;
+        }
+
+        #monitor .hex-stream {
+            display: flex;
+            transition: transform 0.1s linear;
+        }
+
+        .char {
+            display: inline-block;
+            width: 20px;
+            text-align: center;
+            opacity: 0.3;
+        }
+
+        .char.active {
+            color: #fff;
+            opacity: 1;
+            transform: scale(1.5);
+            text-shadow: 0 0 15px #fff;
+        }
+
+        .status {
+            text-align: left;
+            font-size: 0.8rem;
+            margin-bottom: 5px;
+            color: var(--color-dim);
+        }
+
+        .info-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 0.7rem;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>MIMI_HEX </h1>
+        <div class="status">input.mp3を用意して./convert.pyを起動すれば、MIMI_HEX形式で曲がエンコードされます。</div>
+		<div class="status">ちなみに、現代のポップミュージックだろうがなんだろうか鳴らせます。「4bitアレンジ」ではなく「4bit加工」ですね。</div>
+		<div class="panel">
+            <textarea id="scoreInput" placeholder="HELLO!"></textarea>
+            <div class="controls">
+                <div class="info-bar">
+                    <span>RATE: 8000Hz</span>
+                    <span>BIT: 4bit</span>
+                    <span id="charCount">LEN: 0</span>
+                </div>
+                <button onclick="initAudio()">EXECUTE</button>
+            </div>
+        </div>
+		<div class="status">これが本当の「4bit」です。工夫次第で、「4bit風」から脱却する方法はいくらでもありますよ。</div>
+        <div class="status">BUFFER_MONITOR: <span id="progress">0%</span></div>
+        <div id="monitor">
+            <div id="hexStream" class="hex-stream">
+                READY...
+            </div>
+        </div>
+    </div>
+
+<script>
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let source = null;
+    let animationId = null;
+
+    document.getElementById('scoreInput').addEventListener('input', (e) => {
+        const len = e.target.value.replace(/\s/g, '').length;
+        document.getElementById('charCount').textContent = `LEN: ${len}`;
+    });
+
+    async function initAudio() {
+        if (ctx.state === 'suspended') await ctx.resume();
+        playStream();
+    }
+
+    function playStream() {
+        if (source) source.stop();
+        if (animationId) cancelAnimationFrame(animationId);
+
+        const hex = document.getElementById('scoreInput').value.replace(/\s/g, '');
+        if (!hex) return alert("DATA NOT FOUND.");
+
+        const sampleRate = 8000;
+        const audioData = hex.split('').map(char => (parseInt(char, 16) / 7.5 - 1.0));
+        
+        const buffer = ctx.createBuffer(1, audioData.length, sampleRate);
+        const channelData = buffer.getChannelData(0);
+        for (let i = 0; i < audioData.length; i++) {
+            channelData[i] = audioData[i];
+        }
+
+        source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        
+        const monitor = document.getElementById('hexStream');
+        monitor.innerHTML = '';
+        for(let i=0; i<60; i++) {
+            const span = document.createElement('span');
+            span.className = 'char';
+            span.textContent = hex[i] || '-';
+            monitor.appendChild(span);
+        }
+
+        const startTime = ctx.currentTime;
+        source.start();
+
+        function updateMonitor() {
+            const elapsed = ctx.currentTime - startTime;
+            const currentIndex = Math.floor(elapsed * sampleRate);
+            const progress = (currentIndex / hex.length * 100).toFixed(1);
+
+            if (currentIndex < hex.length) {
+                document.getElementById('progress').textContent = `${progress}% [INDEX: ${currentIndex}]`;
+                
+                const displayCount = 30;
+                let displayStr = "";
+                monitor.innerHTML = '';
+                
+                for (let i = -displayCount; i < displayCount; i++) {
+                    const idx = currentIndex + i;
+                    const span = document.createElement('span');
+                    span.className = 'char' + (i === 0 ? ' active' : '');
+                    span.textContent = hex[idx] || (idx < 0 ? ' ' : '_');
+                    monitor.appendChild(span);
+                }
+
+                animationId = requestAnimationFrame(updateMonitor);
+            } else {
+                document.getElementById('progress').textContent = `100% [COMPLETED]`;
+            }
+        }
+
+        updateMonitor();
+    }
+</script>
+</body>
+</html>
