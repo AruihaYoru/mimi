@@ -72,6 +72,9 @@ git clone https://github.com/AruihaYoru/mimi.git
 そして、あなたのHTMLファイルからスクリプトを読み込みます。
 
 ```html
+<script src="path/to/mimi.hex.min.js"></script>
+<script src="path/to/mimi.v1.min.js"></script>
+<script src="path/to/mimi.v2.min.js"></script>
 <script src="path/to/mimi.min.js"></script>
 ```
 
