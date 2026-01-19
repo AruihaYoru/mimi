@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mimi Music Player Test Console</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { margin-bottom: 10px; font-size: 1.5rem; }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: #252526;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        .controls {
+            margin-bottom: 15px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        button.play { background-color: #4CAF50; color: white; }
+        button.play:hover { background-color: #45a049; }
+        button.stop { background-color: #f44336; color: white; }
+        button.stop:hover { background-color: #d32f2f; }
+        button.sample { background-color: #007acc; color: white; }
+        button.sample:hover { background-color: #005f9e; }
+        
+        textarea {
+            width: 100%;
+            height: 300px;
+            background-color: #1e1e1e;
+            color: #9cdcfe;
+            border: 1px solid #3e3e42;
+            border-radius: 4px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            padding: 10px;
+            box-sizing: border-box;
+            resize: vertical;
+            white-space: pre;
+            overflow-x: auto;
+        }
+        .log-area {
+            margin-top: 15px;
+            background: #000;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 150px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.9em;
+            color: #0f0;
+        }
+        .status {
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #888;
+        }
+    </style>
+
+    <!-- 依存ファイルの読み込み順序に注意 -->
+    <script src="mimi.hex.min.js"></script>
+    <script src="mimi.V1.min.js"></script>
+    <script src="mimi.V2.min.js"></script>
+    <script src="mimi.min.js"></script>
+</head>
+<body>
+
+    <h1>Mimi Music Player Test</h1>
+
+    <div class="container">
+        <div class="controls">
+            <button class="play" onclick="playMusic()">▶ Play</button>
+            <button class="stop" onclick="stopMusic()">■ Stop</button>
+            <span style="flex-grow: 1;"></span>
+            <button class="sample" onclick="loadSample('v1')">Load V1 Sample</button>
+            <button class="sample" onclick="loadSample('v2')">Load V2 Sample</button>
+        </div>
+
+        <textarea id="mmlInput" placeholder="ここにMimiフォーマットのテキストを入力してください..."></textarea>
+        
+        <div id="statusMessage" class="status">Ready.</div>
+        
+        <!-- V2エンジンがこのIDを探してログを出力します -->
+        <div id="consoleLog" class="log-area"></div>
+    </div>
+
+    <script>
+        // プレイヤーの初期化
+        let player;
+        
+        window.addEventListener('load', () => {
+            // ライブラリが正しくロードされているか確認
+            if (typeof MimiPlayer === 'undefined') {
+                log("Error: MimiPlayer is not loaded. Check file names.");
+                return;
+            }
+            player = new MimiPlayer(24); // 24 FPS
+            log("System: Player Initialized.");
+            
+            // デフォルトでV2サンプルを表示
+            loadSample('v2');
+        });
+
+        async function playMusic() {
+            if (!player) return;
+            
+            const text = document.getElementById('mmlInput').value;
+            if (!text.trim()) {
+                alert("テキストエリアが空です");
+                return;
+            }
+
+            try {
+                document.getElementById('statusMessage').textContent = "Playing...";
+                // LoadしてPlay
+                await player.load(text);
+                player.play();
+            } catch (e) {
+                console.error(e);
+                log("Error: " + e.message);
+            }
+        }
+
+        function stopMusic() {
+            if (player) {
+                player.stop();
+                document.getElementById('statusMessage').textContent = "Stopped.";
+                log("System: Stopped.");
+            }
+        }
+
+        function log(msg) {
+            const logDiv = document.getElementById('consoleLog');
+            const entry = document.createElement('div');
+            entry.textContent = `> ${msg}`;
+            logDiv.appendChild(entry);
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        // --- サンプルデータ ---
+
+        function loadSample(ver) {
+            const input = document.getElementById('mmlInput');
+            if (ver === 'v1') {
+                // V1: シンプルな矩形波メロディ
+                input.value = `# Mimi Music Format v1.0
+# Title: Retro Beep Test
+# Tempo: 120
+# Type(0-3), Pitch(Hex), Len(Hex), Start(Hex), Vol(Hex), Pan(Hex)
+
+# Type 2: Square Wave
+2, 3C, 08, 00, FF, 80
+2, 40, 08, 08, FF, 80
+2, 43, 08, 10, FF, 80
+2, 48, 10, 18, FF, 80
+
+# Bass (Triangle)
+1, 24, 08, 00, C0, 40
+1, 24, 08, 08, C0, 40
+1, 24, 08, 10, C0, 40
+1, 24, 10, 18, C0, 40`;
+            } else {
+                // V2: SuperSaw, FM, Hex Drum
+                // 注: Hexデータは短くカットしています
+                input.value = `# Mimi Music Format v2.0
+# Title: Modern Synth Test
+# Tempo: 130
+# Type, Pitch, Len, Start, Vol, Pan, Atk, Rel ; Slide
+
+# --- Lead (SuperSaw: Type 0C) ---
+0C, 3C, 06, 00, FF, 60, 02, 08
+0C, 3F, 06, 06, FF, A0, 02, 08
+0C, 43, 06, 0C, FF, 60, 02, 08
+0C, 48, 18, 12, FF, 80, 02, 10 ; 10
+
+# --- Bass (FM Growl: Type 0A) ---
+0A, 24, 04, 00, E0, 80, 01, 01
+0A, 24, 04, 06, D0, 80, 01, 01
+0A, 2B, 04, 0C, E0, 80, 01, 01
+0A, 24, 04, 12, E0, 80, 01, 01
+
+# --- Pluck (Type 0E) ---
+0E, 48, 02, 00, A0, C0
+0E, 4F, 02, 04, A0, 40
+0E, 54, 02, 08, A0, C0
+
+# --- Kick Drum (Hex PCM: Type 0F) ---
+# Format: 0F, StartTime, HexData...
+0F, 00, 80000089ABCDEEEEEDCBA9876543210000
+0F, 0C, 80000089ABCDEEEEEDCBA9876543210000
+0F, 18, 80000089ABCDEEEEEDCBA9876543210000
+`;
+            }
+        }
+    </script>
+</body>
+</html>
