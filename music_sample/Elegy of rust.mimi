@@ -1,0 +1,44 @@
+# Mimi Music Format v2.0
+# Title: 鉄錆の追憶 (Elegy of Rust)
+# Instruments: 00 (Sine), 02 (Square), 03 (Sawtooth)
+# Concept: A sense of heroic sorrow and desolation.
+
+# --- PART 1: A Fading World (0 - 96 frames) ---
+
+# [DRONE] A low, heavy sawtooth wave provides a bed of despair.
+# The sound swells in and out slowly due to long Attack/Release.
+03, 15, C0, 00, 60, 80, 20, 20
+
+# [LONELY BELL] A triangle wave would be ideal, but a high, soft square wave
+# can simulate a cold, distant bell tolling.
+# A simple, repeating motif (A -> G -> E).
+02, 45, 18, 18, 80, 60, 04, 10
+02, 43, 18, 30, 70, A0, 04, 10
+02, 40, 20, 48, 90, 80, 04, 18
+
+# --- PART 2: A Voice of Grief (96 - 192 frames) ---
+
+# [WEEPING MELODY] The main melody played by a pure sine wave.
+# It "weeps" from one note to the next using very slow slides.
+# E5 -> D5 (Slide over 24 frames)
+00, 40, 18, 60, B0, 80, 08, 08 ; 18
+00, 3E, 18, 78, B0, 80, 08, 08
+# C5 -> B4 (Slide over 24 frames)
+00, 3C, 18, 90, B0, 80, 08, 08 ; 18
+00, 3B, 30, A8, B0, 80, 08, 18
+
+# [DISSONANCE] A quiet, harsh square wave adds a layer of pain.
+# It plays a clashing note (B4) against the melody's C5, creating unease.
+02, 3B, 10, 9C, 50, C0, 02, 08
+
+# --- PART 3: Resignation (192 - ...) ---
+
+# The bell tolls one last time, with a long, final slide downwards.
+# It's a sigh of resignation.
+02, 45, 30, C0, 90, 80, 08, 10 ; 30
+02, 30, 10, F0, 00, 80 # Target note (silent)
+
+# The low drone also begins its final, slow fade to silence.
+# The slide makes it sound like the world's power is draining away.
+03, 15, 30, C0, 60, 80, 08, 30 ; 30
+03, 00, 08, F0, 00, 80 # Target note (silent)
